@@ -882,7 +882,8 @@ const S = {
   activeIdx:  -1,
   messages:   [],
   selectedId: null,
-  domains:    [],
+  domains:         [],
+  mailtmAvailable: true,   // set to false during init if mail.tm is unreachable
   polling:    null,
   timerInt:   null,
   modalProv:  'mailtm',
@@ -910,7 +911,12 @@ async function api(path, opts = {}) {
     ...opts,
   })
   const text = await r.text()
-  try { return JSON.parse(text) } catch { return { raw: text } }
+  let data
+  try { data = JSON.parse(text) } catch { data = { raw: text } }
+  // Throw on server-side errors (5xx) so callers get a real Error instead of
+  // silently receiving a JSON body that looks like success.
+  if (r.status >= 500) throw new Error(data?.error || `HTTP ${r.status}`)
+  return data
 }
 const authH = t => ({ headers: { Authorization: `Bearer ${t}` } })
 
@@ -929,9 +935,19 @@ function avInitial(name, email) {
 async function init() {
   load()
   try {
-    const { domains } = await api('/api/mailtm/domains')
-    S.domains = domains || []
-  } catch {}
+    const r = await api('/api/mailtm/domains')
+    S.domains = r.domains || []
+    // Mark mailtm as available only when we actually got domains
+    S.mailtmAvailable = !r.error && S.domains.length > 0
+  } catch {
+    S.domains = []
+    S.mailtmAvailable = false
+  }
+
+  // If mail.tm is unavailable and the default tab is mailtm, pre-select tempmailio
+  if (!S.mailtmAvailable && S.modalProv === 'mailtm') {
+    S.modalProv = 'tempmailio'
+  }
 
   if (S.accounts.length > 0) await refreshTokens()
 
@@ -1560,11 +1576,40 @@ function openModalNew() {
   if (S.accounts.length >= MAX_ACCOUNTS) {
     toast(`Limite de ${MAX_ACCOUNTS} boîtes atteinte`, 'err'); return
   }
+
+  // If mail.tm has no domains (blocked on this host), auto-select tempmailio
+  const effectiveProv = (!S.mailtmAvailable && S.modalProv === 'mailtm')
+    ? 'tempmailio'
+    : S.modalProv
+  if (effectiveProv !== S.modalProv) {
+    S.modalProv = effectiveProv
+    document.querySelectorAll('.modal-tab').forEach(t =>
+      t.classList.toggle('active', t.dataset.prov === effectiveProv)
+    )
+    ;['mailtm','tempmailio','smailpro'].forEach(p => {
+      document.getElementById(`pf-${p}`).style.display = p === effectiveProv ? '' : 'none'
+    })
+  }
+
+  // Disable/annotate the mail.tm tab when it's not reachable from this host
+  const mailtmTab = document.querySelector('[data-prov="mailtm"]')
+  if (mailtmTab) {
+    if (!S.mailtmAvailable) {
+      mailtmTab.disabled = true
+      mailtmTab.title = 'mail.tm indisponible depuis ce serveur'
+      mailtmTab.style.opacity = '0.4'
+    } else {
+      mailtmTab.disabled = false
+      mailtmTab.title = ''
+      mailtmTab.style.opacity = ''
+    }
+  }
+
   const sel = document.getElementById('f-domain')
   if (S.domains.length > 0)
     sel.innerHTML = S.domains.map(d => `<option>${d}</option>`).join('')
   else
-    sel.innerHTML = '<option disabled>Aucun domaine dispo</option>'
+    sel.innerHTML = '<option disabled>Indisponible</option>'
   updatePreview()
   document.getElementById('modal-new').classList.add('open')
 }
