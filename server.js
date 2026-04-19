@@ -1,218 +1,268 @@
-import express from 'express';
-import axios from 'axios';
-import cors from 'cors';
-import { v4 as uuidv4 } from 'uuid';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import express from 'express'
+import cors from 'cors'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const app = express();
-const PORT = 3000;
-const API_URL = 'https://api.mail.tm';
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const app = express()
+const PORT = process.env.PORT || 3000
 
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Sessions in memory: sessionId -> { address, token, password, createdAt }
-const sessions = new Map();
-
-// Cleanup sessions older than 24h every 30min
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, s] of sessions.entries()) {
-    if (now - s.createdAt > 86400000) sessions.delete(id);
-  }
-}, 1800000);
-
-// ─── Helper ────────────────────────────────────────────────────────────────
-
-function mailClient(token) {
-  return axios.create({
-    baseURL: API_URL,
-    headers: { Authorization: `Bearer ${token}` },
-    timeout: 12000,
-  });
+// ─── Providers ────────────────────────────────────────────────────────────────
+const P = {
+  mailtm:    { base: 'https://api.mail.tm',               name: 'mail.tm' },
+  tempmailio:{ base: 'https://api.internal.temp-mail.io', name: 'temp-mail.io' },
+  smailpro:  { base: 'https://api.sonjj.com', payload: 'https://smailpro.com/app/payload', name: 'smailpro' },
 }
 
-function handleError(res, e, defaultMsg) {
-  console.error(e?.response?.data || e.message);
-  const status = e?.response?.status || 500;
-  if (status === 401) return res.status(401).json({ error: 'Session expirée, veuillez créer une nouvelle adresse' });
-  if (status === 429) return res.status(429).json({ error: 'Trop de requêtes, veuillez patienter' });
-  res.status(500).json({ error: defaultMsg });
+// ─── Middleware ────────────────────────────────────────────────────────────────
+app.use(cors())
+app.use(express.json())
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Browser-like headers that mail.tm expects (mirrors a real Chrome request)
+const MAILTM_HEADERS = {
+  'accept': '*/*',
+  'accept-language': 'fr-FR,fr;q=0.7',
+  'origin': 'https://mail.tm',
+  'referer': 'https://mail.tm/',
+  'priority': 'u=1, i',
+  'sec-ch-ua': '"Brave";v="147", "Not.A/Brand";v="8", "Chromium";v="147"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"',
+  'sec-fetch-dest': 'empty',
+  'sec-fetch-mode': 'cors',
+  'sec-fetch-site': 'same-site',
+  'sec-gpc': '1',
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
 }
 
-// ─── Routes ────────────────────────────────────────────────────────────────
-
-// GET /api/domains
-app.get('/api/domains', async (req, res) => {
-  try {
-    const r = await axios.get(`${API_URL}/domains`, { timeout: 8000 });
-    res.json(r.data['hydra:member'].filter(d => d.isActive));
-  } catch (e) {
-    handleError(res, e, 'Impossible de récupérer les domaines');
+async function proxy(url, opts = {}) {
+  // Inject real browser headers only for mail.tm requests
+  const isMailTm = url.startsWith('https://api.mail.tm')
+  const baseHeaders = isMailTm ? MAILTM_HEADERS : {
+    'user-agent': 'Mozilla/5.0 (compatible; elecktemp/1.0)',
+    'accept': 'application/json',
   }
-});
 
-// POST /api/accounts — Crée un nouveau compte mail (supporte ?prefix=xxx)
-app.post('/api/accounts', async (req, res) => {
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      ...baseHeaders,
+      'content-type': 'application/json',
+      ...opts.headers,
+    },
+  })
+  const text = await res.text()
+  let data
+  try { data = JSON.parse(text) } catch { data = { raw: text } }
+  return { status: res.status, data }
+}
+
+function bearer(req) {
+  const t = req.headers.authorization?.replace('Bearer ', '')
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
+
+// ─── mail.tm ──────────────────────────────────────────────────────────────────
+app.get('/api/mailtm/domains', async (req, res) => {
   try {
-    const domainsRes = await axios.get(`${API_URL}/domains`, { timeout: 8000 });
-    const domains = domainsRes.data['hydra:member'].filter(d => d.isActive);
-    if (!domains.length) return res.status(500).json({ error: 'Aucun domaine disponible' });
+    const { status, data } = await proxy(`${P.mailtm.base}/domains`)
+    res.status(status).json({ domains: data['hydra:member']?.map(d => d.domain) ?? [] })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-    // Support domain selection
-    let domain = domains[0].domain;
-    if (req.body.domain) {
-      const found = domains.find(d => d.domain === req.body.domain);
-      if (found) domain = found.domain;
-    }
-
-    // Support custom prefix (alphanum only, 3-20 chars)
-    let prefix = uuidv4().replace(/-/g, '').substring(0, 12);
-    if (req.body.prefix) {
-      const clean = req.body.prefix.replace(/[^a-z0-9._-]/gi, '').toLowerCase();
-      if (clean.length >= 3 && clean.length <= 20) prefix = clean;
-      else return res.status(400).json({ error: 'Le préfixe doit faire entre 3 et 20 caractères (lettres, chiffres, . - _)' });
-    }
-
-    const address = `${prefix}@${domain}`;
-    const password = uuidv4();
-
-    await axios.post(`${API_URL}/accounts`, { address, password }, { timeout: 10000 });
-    const tokenRes = await axios.post(`${API_URL}/token`, { address, password }, { timeout: 10000 });
-    const token = tokenRes.data.token;
-
-    const sessionId = uuidv4();
-    sessions.set(sessionId, { address, token, password, createdAt: Date.now() });
-
-    res.json({ sessionId, address, domain });
-  } catch (e) {
-    if (e?.response?.status === 422) {
-      return res.status(422).json({ error: 'Cette adresse est déjà prise, essayez un autre préfixe' });
-    }
-    handleError(res, e, 'Erreur lors de la création du compte');
-  }
-});
-
-// GET /api/session?sessionId=xxx — Valide et retourne infos session
-app.get('/api/session', async (req, res) => {
-  const { sessionId } = req.query;
-  const session = sessions.get(sessionId);
-  if (!session) return res.status(404).json({ valid: false, error: 'Session introuvable' });
-  // Quick validation with mail.tm
+app.post('/api/mailtm/accounts', async (req, res) => {
   try {
-    await mailClient(session.token).get('/me');
-    res.json({ valid: true, address: session.address });
-  } catch (e) {
-    sessions.delete(sessionId);
-    res.status(401).json({ valid: false, error: 'Session expirée' });
-  }
-});
+    const { address, password } = req.body
+    if (!address || !password) return res.status(400).json({ error: 'address and password required' })
+    const { status, data } = await proxy(`${P.mailtm.base}/accounts`, {
+      method: 'POST', body: JSON.stringify({ address, password }),
+    })
+    res.status(status).json(data)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-// GET /api/messages?sessionId=xxx
-app.get('/api/messages', async (req, res) => {
-  const { sessionId } = req.query;
-  const session = sessions.get(sessionId);
-  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+app.post('/api/mailtm/token', async (req, res) => {
   try {
-    const client = mailClient(session.token);
-    const r = await client.get('/messages?page=1');
-    const messages = r.data['hydra:member'].map(m => ({
-      id: m.id,
-      from: m.from?.address || m.from?.name || '?',
-      fromName: m.from?.name || '',
-      subject: m.subject || '(Aucun sujet)',
-      intro: m.intro || '',
-      seen: m.seen,
-      hasAttachments: m.hasAttachments || false,
-      size: m.size || 0,
-      createdAt: m.createdAt,
-    }));
-    res.json(messages);
-  } catch (e) {
-    handleError(res, e, 'Erreur lors de la récupération des messages');
-  }
-});
+    const { address, password } = req.body
+    if (!address || !password) return res.status(400).json({ error: 'address and password required' })
+    const { status, data } = await proxy(`${P.mailtm.base}/token`, {
+      method: 'POST', body: JSON.stringify({ address, password }),
+    })
+    res.status(status).json(data)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-// GET /api/messages/:id?sessionId=xxx
-app.get('/api/messages/:id', async (req, res) => {
-  const { sessionId } = req.query;
-  const session = sessions.get(sessionId);
-  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+app.get('/api/mailtm/me', async (req, res) => {
   try {
-    const client = mailClient(session.token);
-    const r = await client.get(`/messages/${req.params.id}`);
-    const msg = r.data;
-    res.json({
-      id: msg.id,
-      from: msg.from?.address || '?',
-      fromName: msg.from?.name || '',
-      to: (msg.to || []).map(t => t.address).join(', ') || '?',
-      subject: msg.subject || '(Aucun sujet)',
-      text: msg.text || '',
-      html: msg.html || [],
-      seen: msg.seen,
-      hasAttachments: msg.hasAttachments || false,
-      attachments: (msg.attachments || []).map(a => ({
-        id: a.id, filename: a.filename, contentType: a.contentType, size: a.size
-      })),
-      createdAt: msg.createdAt,
-    });
-  } catch (e) {
-    handleError(res, e, 'Erreur lors de la récupération du message');
-  }
-});
+    const { status, data } = await proxy(`${P.mailtm.base}/me`, { headers: bearer(req) })
+    res.status(status).json(data)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-// DELETE /api/messages/:id?sessionId=xxx
-app.delete('/api/messages/:id', async (req, res) => {
-  const { sessionId } = req.query;
-  const session = sessions.get(sessionId);
-  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+app.get('/api/mailtm/messages', async (req, res) => {
   try {
-    await mailClient(session.token).delete(`/messages/${req.params.id}`);
-    res.json({ success: true });
-  } catch (e) {
-    handleError(res, e, 'Erreur lors de la suppression du message');
-  }
-});
+    const page = req.query.page || 1
+    const { status, data } = await proxy(`${P.mailtm.base}/messages?page=${page}`, { headers: bearer(req) })
+    res.status(status).json({ messages: data['hydra:member'] ?? [], total: data['hydra:totalItems'] ?? 0 })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-// PATCH /api/messages/:id?sessionId=xxx — Marquer lu/non lu
-app.patch('/api/messages/:id', async (req, res) => {
-  const { sessionId } = req.query;
-  const session = sessions.get(sessionId);
-  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+app.get('/api/mailtm/messages/:id', async (req, res) => {
   try {
-    await mailClient(session.token).patch(`/messages/${req.params.id}`, { seen: req.body.seen });
-    res.json({ success: true });
-  } catch (e) {
-    handleError(res, e, 'Erreur lors de la mise à jour du message');
-  }
-});
+    const { status, data } = await proxy(`${P.mailtm.base}/messages/${req.params.id}`, { headers: bearer(req) })
+    res.status(status).json(data)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-// DELETE /api/accounts?sessionId=xxx
-app.delete('/api/accounts', async (req, res) => {
-  const { sessionId } = req.query;
-  const session = sessions.get(sessionId);
-  if (!session) return res.status(404).json({ error: 'Session introuvable' });
+app.delete('/api/mailtm/messages/:id', async (req, res) => {
   try {
-    const client = mailClient(session.token);
-    const meRes = await client.get('/me');
-    await client.delete(`/accounts/${meRes.data.id}`);
-  } catch (e) {
-    console.error('Delete account error:', e?.response?.data || e.message);
-  } finally {
-    sessions.delete(sessionId);
-    res.json({ success: true });
-  }
-});
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const r = await fetch(`${P.mailtm.base}/messages/${req.params.id}`, {
+      method: 'DELETE',
+      headers: { ...MAILTM_HEADERS, Authorization: `Bearer ${token}` },
+    })
+    res.status(r.status).json({ deleted: r.status === 204 })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
 
-// Fallback → index.html
+app.patch('/api/mailtm/messages/:id/read', async (req, res) => {
+  try {
+    const { status, data } = await proxy(`${P.mailtm.base}/messages/${req.params.id}`, {
+      method: 'PATCH',
+      headers: { ...bearer(req), 'content-type': 'application/merge-patch+json' },
+      body: JSON.stringify({ seen: true }),
+    })
+    res.status(status).json(data)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/api/mailtm/accounts/:id', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const r = await fetch(`${P.mailtm.base}/accounts/${req.params.id}`, {
+      method: 'DELETE',
+      headers: { ...MAILTM_HEADERS, Authorization: `Bearer ${token}` },
+    })
+    res.status(r.status).json({ deleted: r.status === 204 })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── temp-mail.io ─────────────────────────────────────────────────────────────
+app.post('/api/tempmailio/new', async (req, res) => {
+  try {
+    const { status, data } = await proxy(`${P.tempmailio.base}/api/v3/email/new`, {
+      method: 'POST',
+      body: JSON.stringify({
+        min_name_length: req.body?.min_name_length ?? 10,
+        max_name_length: req.body?.max_name_length ?? 12,
+      }),
+    })
+    res.status(status).json(data)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/api/tempmailio/messages/:email', async (req, res) => {
+  try {
+    const { data } = await proxy(
+      `${P.tempmailio.base}/api/v3/email/${encodeURIComponent(req.params.email)}/messages`,
+      { headers: bearer(req) }
+    )
+    const messages = Array.isArray(data) ? data : []
+    res.json({ messages, total: messages.length })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── smailpro (via sonjj.com) ─────────────────────────────────────────────────
+async function getSmailproJWT(apiPath, extraParams = '') {
+  const targetUrl = `${P.smailpro.base}${apiPath}`
+  const payloadReqUrl = `${P.smailpro.payload}?url=${encodeURIComponent(targetUrl)}${extraParams}`
+  const { data } = await proxy(payloadReqUrl, {
+    headers: { Referer: 'https://smailpro.com/', Origin: 'https://smailpro.com' },
+  })
+  return data.raw || (typeof data === 'string' ? data : null)
+}
+
+app.post('/api/smailpro/new', async (req, res) => {
+  try {
+    const jwt = await getSmailproJWT('/v1/temp_email/create')
+    if (!jwt) return res.status(502).json({ error: 'Could not get smailpro token' })
+    const { status, data } = await proxy(
+      `${P.smailpro.base}/v1/temp_email/create?payload=${encodeURIComponent(jwt)}`,
+      { headers: { Referer: 'https://smailpro.com/' } }
+    )
+    res.status(status).json(data)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/api/smailpro/messages/:email', async (req, res) => {
+  try {
+    const email = req.params.email
+    const jwt = await getSmailproJWT('/v1/temp_email/inbox', `&email=${encodeURIComponent(email)}`)
+    if (!jwt) return res.status(502).json({ error: 'Could not get smailpro token' })
+    const { status, data } = await proxy(
+      `${P.smailpro.base}/v1/temp_email/inbox?payload=${encodeURIComponent(jwt)}`,
+      { headers: { Referer: 'https://smailpro.com/' } }
+    )
+    const messages = data.messages || []
+    res.status(status).json({ messages, total: messages.length })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/api/smailpro/message/:email/:mid', async (req, res) => {
+  try {
+    const { email, mid } = req.params
+    const jwt = await getSmailproJWT(
+      '/v1/temp_email/message',
+      `&email=${encodeURIComponent(email)}&mid=${encodeURIComponent(mid)}`
+    )
+    if (!jwt) return res.status(502).json({ error: 'Could not get smailpro token' })
+    const { status, data } = await proxy(
+      `${P.smailpro.base}/v1/temp_email/message?payload=${encodeURIComponent(jwt)}`,
+      { headers: { Referer: 'https://smailpro.com/' } }
+    )
+    res.status(status).json(data)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── System ───────────────────────────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', version: '2.1.0', name: 'elecktemp', providers: Object.keys(P), ts: new Date().toISOString() })
+})
+
+app.get('/api/providers/status', async (req, res) => {
+  const checks = await Promise.allSettled([
+    fetch(`${P.mailtm.base}/domains`, {
+      headers: MAILTM_HEADERS,
+      signal: AbortSignal.timeout(5000),
+    }).then(r => ({ provider: 'mailtm', up: r.ok })),
+    fetch(`${P.tempmailio.base}/api/v3/email/new`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ min_name_length: 5, max_name_length: 5 }),
+      signal: AbortSignal.timeout(5000),
+    }).then(r => ({ provider: 'tempmailio', up: r.ok })),
+  ])
+  res.json({
+    providers: checks.map(c =>
+      c.status === 'fulfilled' ? c.value : { provider: 'unknown', up: false }
+    ),
+  })
+})
+
+// ─── Static files (index.html at root, not in /public/) ───────────────────────
+app.use(express.static(__dirname))
+
+// ─── SPA fallback ─────────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+  res.sendFile(path.join(__dirname, 'index.html'))
+})
 
-app.listen(PORT, () => {
-  console.log(`\n✅  ElekTemp démarré sur http://localhost:${PORT}\n`);
-});
+// ─── Start ────────────────────────────────────────────────────────────────────
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`elecktemp → http://localhost:${PORT}`)
+  })
+}
+
+export default app

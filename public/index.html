@@ -1,0 +1,1729 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>elecktemp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Reset ──────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+button{cursor:pointer;font-family:inherit;border:none;background:none}
+input,select,textarea{font-family:inherit}
+a{color:inherit;text-decoration:none}
+
+/* ── Tokens ─────────────────────────────────────────────────── */
+:root{
+  --bg:      #0d0c0b;
+  --s0:      #111010;
+  --s1:      #161513;
+  --s2:      #1c1a18;
+  --s3:      #222019;
+  --s4:      #2a2724;
+  --s5:      #35322d;
+  --accent:  #c8956c;
+  --a-dim:   rgba(200,149,108,.10);
+  --a-med:   rgba(200,149,108,.18);
+  --a-bdr:   rgba(200,149,108,.28);
+  --green:   #6aab7e;
+  --g-dim:   rgba(106,171,126,.12);
+  --red:     #c06060;
+  --r-dim:   rgba(192,96,96,.12);
+  --blue:    #7ea8c8;
+  --purple:  #a78bfa;
+  --text:    #edeae4;
+  --t2:      #9b9590;
+  --t3:      #575350;
+  --t4:      #38352f;
+  --r:       5px;
+  --mono:    'JetBrains Mono',monospace;
+  --sans:    'Inter',sans-serif;
+  --sw:      220px;  /* sidebar width */
+  --lw:      340px;  /* list width */
+  --shadow:  0 2px 12px rgba(0,0,0,.4);
+  --shadow2: 0 8px 32px rgba(0,0,0,.5);
+}
+
+html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--s5);border-radius:2px}
+
+/* ── App shell ──────────────────────────────────────────────── */
+#app{display:flex;height:100dvh;overflow:hidden}
+
+/* ══ SIDEBAR ════════════════════════════════════════════════════ */
+#sidebar{
+  width:var(--sw);flex-shrink:0;
+  display:flex;flex-direction:column;
+  background:var(--s0);
+  border-right:1px solid var(--s4);
+  z-index:10;
+}
+
+.sb-top{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px 12px;
+  border-bottom:1px solid var(--s4);
+  flex-shrink:0;
+}
+.logo{font-size:16px;font-weight:700;letter-spacing:-.03em;color:var(--text)}
+.logo b{color:var(--accent)}
+
+/* Live indicator */
+.live-dot{
+  display:flex;align-items:center;gap:5px;
+  font-size:10px;font-weight:500;letter-spacing:.04em;
+  color:var(--t3);
+  text-transform:uppercase;
+  font-family:var(--mono);
+}
+.live-ring{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--t4);
+  position:relative;
+  transition:background .3s;
+}
+.live-ring::after{
+  content:'';
+  position:absolute;inset:-3px;
+  border-radius:50%;
+  border:1.5px solid transparent;
+  transition:border-color .3s,transform .3s;
+}
+.live-dot.active .live-ring{background:var(--green)}
+.live-dot.active .live-ring::after{
+  border-color:var(--green);
+  animation:live-ping 1.4s ease-out;
+}
+@keyframes live-ping{
+  0%{transform:scale(.8);opacity:1}
+  100%{transform:scale(2);opacity:0}
+}
+
+/* Account list */
+.sb-accounts{flex:1;overflow-y:auto;padding:8px}
+
+.acct-card{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 10px;
+  border-radius:var(--r);
+  border:1px solid transparent;
+  cursor:pointer;
+  transition:all .14s;
+  position:relative;
+  margin-bottom:2px;
+}
+.acct-card:hover{background:var(--s2);border-color:var(--s4)}
+.acct-card.active{
+  background:var(--a-dim);
+  border-color:var(--a-bdr);
+}
+.acct-avatar{
+  width:32px;height:32px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:600;flex-shrink:0;
+  color:#fff;
+}
+.acct-info{flex:1;min-width:0}
+.acct-email{
+  font-size:11px;font-weight:500;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  color:var(--text);
+  font-family:var(--mono);
+}
+.acct-card.active .acct-email{color:var(--accent)}
+.acct-meta{
+  display:flex;align-items:center;gap:5px;
+  margin-top:2px;
+}
+.acct-prov{
+  font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  padding:1px 5px;border-radius:2px;
+  font-family:var(--mono);
+}
+.acct-prov.mailtm    {color:#a78bfa;background:rgba(167,139,250,.10)}
+.acct-prov.tempmailio{color:var(--accent);background:var(--a-dim)}
+.acct-prov.smailpro  {color:var(--green);background:var(--g-dim)}
+.acct-time{font-size:9px;color:var(--t3);font-family:var(--mono)}
+
+.acct-badge{
+  flex-shrink:0;
+  min-width:18px;height:18px;
+  border-radius:9px;
+  background:var(--accent);color:#0d0c0b;
+  font-size:9px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 4px;
+}
+
+/* Sidebar bottom */
+.sb-bottom{
+  flex-shrink:0;
+  padding:10px;
+  border-top:1px solid var(--s4);
+}
+.quota-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;
+  padding:0 2px;
+}
+.quota-label{font-size:10px;color:var(--t3)}
+.quota-bar{
+  flex:1;height:2px;background:var(--s4);border-radius:1px;
+  margin:0 10px;overflow:hidden;
+}
+.quota-fill{height:100%;background:var(--accent);border-radius:1px;transition:width .3s}
+.quota-count{font-size:10px;color:var(--t2);font-family:var(--mono)}
+
+.btn-new-inbox{
+  width:100%;padding:8px;
+  background:var(--a-dim);border:1px solid var(--a-bdr);
+  border-radius:var(--r);
+  color:var(--accent);font-size:12px;font-weight:500;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all .14s;
+}
+.btn-new-inbox:hover{background:var(--a-med)}
+.btn-new-inbox:disabled{opacity:.35;cursor:not-allowed}
+.btn-new-inbox svg{flex-shrink:0}
+
+/* ══ LIST PANEL ══════════════════════════════════════════════════ */
+#list-panel{
+  width:var(--lw);flex-shrink:0;
+  display:flex;flex-direction:column;
+  border-right:1px solid var(--s4);
+  background:var(--s1);
+  min-height:0;
+}
+
+.list-head{
+  flex-shrink:0;
+  padding:10px 10px 0;
+  background:var(--s1);
+}
+
+/* Active inbox header */
+.inbox-header{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 2px 10px;
+}
+.inbox-addr{
+  flex:1;min-width:0;
+  font-size:12px;font-family:var(--mono);color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.inbox-addr.empty{color:var(--t3);font-family:var(--sans);font-size:12px}
+.btn-copy-addr{
+  padding:4px;border-radius:3px;color:var(--t3);
+  transition:color .14s;flex-shrink:0;
+}
+.btn-copy-addr:hover{color:var(--text)}
+.btn-copy-addr.ok{color:var(--green)}
+.inbox-timer-chip{
+  font-size:9px;font-family:var(--mono);
+  padding:2px 6px;border-radius:3px;
+  border:1px solid var(--s4);color:var(--t3);
+  flex-shrink:0;
+}
+.inbox-timer-chip.warn{border-color:var(--a-bdr);color:var(--accent)}
+
+/* Search */
+.search-row{
+  display:flex;align-items:center;gap:6px;
+  background:var(--s2);
+  border:1px solid var(--s4);
+  border-radius:var(--r);
+  padding:0 10px;
+  margin-bottom:8px;
+}
+.search-row svg{flex-shrink:0;color:var(--t3)}
+#search{
+  flex:1;background:none;border:none;outline:none;
+  color:var(--text);font-size:12px;padding:7px 0;
+}
+#search::placeholder{color:var(--t3)}
+
+/* Filter tabs */
+.filter-tabs{
+  display:flex;gap:2px;
+  padding:0 0 8px;
+}
+.filter-tab{
+  padding:4px 10px;border-radius:3px;
+  font-size:11px;font-weight:500;color:var(--t2);
+  transition:all .12s;
+}
+.filter-tab.active{background:var(--s3);color:var(--text)}
+.filter-tab:hover:not(.active){color:var(--text)}
+
+/* List toolbar */
+.list-toolbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 2px;
+  border-top:1px solid var(--s4);
+  flex-shrink:0;
+}
+.lcount{font-size:10px;color:var(--t3)}
+.lcount b{color:var(--accent)}
+.ltool-btns{display:flex;gap:2px}
+.ltool-btn{
+  padding:4px 6px;border-radius:3px;color:var(--t3);
+  transition:all .12s;display:flex;align-items:center;
+}
+.ltool-btn:hover{color:var(--t2);background:var(--s3)}
+.ltool-btn.spin svg{animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Message list */
+.msg-list-body{
+  flex:1;overflow-y:auto;
+  padding:4px 6px;
+}
+
+/* Empty state */
+.list-empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;gap:10px;padding:40px 20px;text-align:center;
+}
+.list-empty-icon{font-size:32px;opacity:.2}
+.list-empty-title{font-size:13px;font-weight:500;color:var(--t3)}
+.list-empty-sub{font-size:11px;color:var(--t3);font-family:var(--mono)}
+
+/* Skeleton */
+.skel-item{
+  padding:11px 10px;border-radius:var(--r);margin-bottom:2px;
+  display:flex;gap:10px;align-items:flex-start;
+}
+.skel-av{width:34px;height:34px;border-radius:50%;background:var(--s3);flex-shrink:0;animation:skel 1.4s ease infinite}
+.skel-lines{flex:1}
+.skel-line{height:9px;border-radius:3px;background:var(--s3);margin-bottom:6px;animation:skel 1.4s ease infinite}
+.skel-line:last-child{width:55%;margin-bottom:0}
+@keyframes skel{0%,100%{opacity:.4}50%{opacity:.9}}
+
+/* Message row */
+.msg-row{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px 10px;
+  border-radius:var(--r);
+  cursor:pointer;
+  border:1px solid transparent;
+  margin-bottom:1px;
+  transition:all .12s;
+  position:relative;
+  animation:row-in .2s ease;
+}
+@keyframes row-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.msg-row:hover{background:var(--s2);border-color:var(--s4)}
+.msg-row.active{background:var(--s2);border-color:var(--s4)}
+.msg-row.active::before{
+  content:'';position:absolute;left:0;top:8px;bottom:8px;
+  width:2px;background:var(--accent);border-radius:2px;
+}
+.msg-row.new-arrival{animation:row-new .5s ease}
+@keyframes row-new{0%{background:rgba(200,149,108,.12)}100%{background:transparent}}
+
+.msg-avatar{
+  width:34px;height:34px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:600;flex-shrink:0;color:#fff;
+  margin-top:1px;
+}
+.msg-avatar.unread-ring{box-shadow:0 0 0 2px var(--accent)}
+
+.msg-body{flex:1;min-width:0}
+.msg-row-top{
+  display:flex;align-items:baseline;gap:6px;margin-bottom:2px;
+}
+.msg-from{
+  flex:1;font-size:12px;font-weight:500;color:var(--t2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.msg-row.unread .msg-from{color:var(--text);font-weight:600}
+.msg-time{flex-shrink:0;font-size:10px;font-family:var(--mono);color:var(--t3)}
+.msg-row.unread .msg-time{color:var(--t2)}
+.msg-subject{
+  font-size:12px;color:var(--t3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  margin-bottom:2px;
+}
+.msg-row.unread .msg-subject{color:var(--t2)}
+.msg-preview{
+  font-size:11px;color:var(--t3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.unread-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--accent);flex-shrink:0;margin-left:2px;margin-top:3px;
+}
+
+/* ══ READER PANEL ════════════════════════════════════════════════ */
+#reader-panel{
+  flex:1;min-width:0;
+  display:flex;flex-direction:column;
+  background:var(--bg);
+  min-height:0;
+}
+
+/* Empty state */
+.reader-empty{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:14px;color:var(--t3);
+}
+.reader-empty-icon{font-size:40px;opacity:.15}
+.reader-empty-title{font-size:16px;font-weight:500;color:var(--t3)}
+.reader-empty-sub{font-size:12px;color:var(--t4);font-family:var(--mono)}
+.shortcuts-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;
+  margin-top:6px;max-width:280px;width:100%;
+}
+.shortcut-chip{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 10px;border-radius:var(--r);
+  background:var(--s1);border:1px solid var(--s4);
+  font-size:11px;color:var(--t3);
+}
+.shortcut-chip kbd{
+  font-family:var(--mono);font-size:10px;
+  background:var(--s2);border:1px solid var(--s5);
+  border-radius:3px;padding:1px 5px;color:var(--t2);flex-shrink:0;
+}
+
+/* Reader content */
+.reader-content{
+  display:flex;flex-direction:column;flex:1;min-height:0;
+  overflow:hidden;
+}
+.reader-head{
+  flex-shrink:0;
+  padding:20px 24px 16px;
+  background:var(--s1);
+  border-bottom:1px solid var(--s4);
+}
+.reader-subject{
+  font-size:20px;font-weight:600;line-height:1.3;
+  letter-spacing:-.02em;margin-bottom:14px;
+}
+.reader-sender{
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:14px;
+}
+.reader-av{
+  width:40px;height:40px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:600;flex-shrink:0;color:#fff;
+}
+.reader-av-info{flex:1;min-width:0}
+.reader-from-name{font-size:13px;font-weight:500;color:var(--text)}
+.reader-from-addr{font-size:11px;color:var(--t2);font-family:var(--mono)}
+.reader-date{font-size:11px;color:var(--t3);font-family:var(--mono);margin-left:auto;flex-shrink:0}
+
+.reader-meta{
+  display:flex;flex-wrap:wrap;gap:6px 20px;
+  margin-bottom:14px;
+  padding:10px 12px;
+  background:var(--s2);border:1px solid var(--s4);
+  border-radius:var(--r);
+  font-size:11px;font-family:var(--mono);
+}
+.reader-meta-row{display:flex;gap:6px}
+.reader-meta-key{color:var(--t3);flex-shrink:0}
+.reader-meta-val{color:var(--t2)}
+
+.reader-actions{display:flex;gap:6px;flex-wrap:wrap}
+.raction{
+  display:flex;align-items:center;gap:5px;
+  padding:5px 12px;
+  background:var(--s2);border:1px solid var(--s4);
+  border-radius:var(--r);font-size:11px;font-weight:500;color:var(--t2);
+  transition:all .12s;
+}
+.raction:hover{border-color:var(--s5);color:var(--text);background:var(--s3)}
+.raction.danger:hover{border-color:rgba(192,96,96,.4);color:var(--red)}
+.raction svg{flex-shrink:0}
+
+/* Attachments */
+.reader-attachments{
+  display:flex;flex-wrap:wrap;gap:6px;
+  margin-top:10px;padding-top:10px;
+  border-top:1px solid var(--s4);
+}
+.attach-chip{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 9px;
+  background:var(--s2);border:1px solid var(--s4);border-radius:var(--r);
+  font-size:10px;color:var(--t2);font-family:var(--mono);
+}
+
+/* Reader body */
+.reader-body{
+  flex:1;overflow-y:auto;
+  padding:20px 24px;
+}
+.reader-body iframe{
+  width:100%;border:none;
+  background:#fff;border-radius:var(--r);display:block;
+}
+.text-body{
+  font-family:var(--mono);font-size:12px;line-height:1.9;
+  color:var(--t2);white-space:pre-wrap;word-break:break-all;
+  background:var(--s1);border:1px solid var(--s4);
+  border-radius:var(--r);padding:18px;
+}
+
+/* ══ MODAL ════════════════════════════════════════════════════════ */
+.overlay{
+  position:fixed;inset:0;
+  background:rgba(10,9,8,.75);
+  backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;
+  z-index:100;opacity:0;pointer-events:none;
+  transition:opacity .18s;padding:16px;
+}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{
+  background:var(--s1);border:1px solid var(--s5);
+  border-radius:10px;padding:24px;
+  width:420px;max-width:100%;
+  transform:translateY(8px);
+  transition:transform .2s;position:relative;
+  box-shadow:var(--shadow2);
+}
+.overlay.open .modal{transform:none}
+.modal-close{
+  position:absolute;top:14px;right:14px;
+  color:var(--t3);padding:4px;border-radius:3px;
+  transition:color .12s;
+}
+.modal-close:hover{color:var(--text)}
+.modal-title{font-size:17px;font-weight:600;margin-bottom:3px;letter-spacing:-.01em}
+.modal-sub{font-size:11px;color:var(--t3);margin-bottom:18px;font-family:var(--mono)}
+
+.modal-tabs{
+  display:flex;gap:2px;
+  background:var(--s2);border-radius:6px;padding:3px;margin-bottom:16px;
+}
+.modal-tab{
+  flex:1;padding:6px;text-align:center;
+  font-size:11px;font-weight:500;cursor:pointer;
+  border-radius:4px;background:transparent;color:var(--t3);
+  transition:all .12s;
+}
+.modal-tab.active{background:var(--s3);color:var(--text)}
+
+.form-group{margin-bottom:12px}
+.form-label{
+  display:block;font-size:10px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--t3);
+  margin-bottom:5px;font-family:var(--mono);
+}
+.form-select,.form-input{
+  width:100%;padding:8px 10px;
+  background:var(--s2);border:1px solid var(--s4);
+  border-radius:var(--r);color:var(--text);
+  font-size:12px;font-family:var(--mono);outline:none;
+  transition:border-color .15s;
+}
+.form-select:focus,.form-input:focus{border-color:var(--a-bdr)}
+.form-select option{background:var(--s2)}
+.form-input::placeholder{color:var(--t3)}
+
+.preview-addr{
+  padding:8px 12px;
+  background:var(--bg);border:1px dashed var(--a-bdr);
+  border-radius:var(--r);font-family:var(--mono);font-size:12px;
+  color:var(--accent);text-align:center;margin:12px 0;
+  min-height:34px;display:flex;align-items:center;justify-content:center;
+}
+.info-box{
+  background:var(--s2);border:1px solid var(--s4);border-radius:var(--r);
+  padding:12px 14px;font-size:12px;color:var(--t2);line-height:1.7;
+}
+.info-box strong{color:var(--text)}
+
+.modal-footer{display:flex;gap:8px;margin-top:16px}
+.btn-primary{
+  flex:1;padding:9px;
+  background:var(--a-dim);border:1px solid var(--a-bdr);
+  border-radius:var(--r);color:var(--accent);
+  font-size:13px;font-weight:600;transition:all .15s;
+}
+.btn-primary:hover{background:var(--a-med)}
+.btn-primary:disabled{opacity:.35;cursor:not-allowed}
+.btn-cancel{
+  padding:9px 16px;background:transparent;
+  border:1px solid var(--s4);border-radius:var(--r);
+  color:var(--t2);font-size:13px;transition:all .12s;
+}
+.btn-cancel:hover{border-color:var(--s5);color:var(--text)}
+
+/* Confirm */
+.confirm-box{
+  background:var(--s1);border:1px solid var(--s5);
+  border-radius:10px;padding:22px;width:300px;max-width:100%;
+  transform:scale(.96);transition:transform .18s;text-align:center;
+  box-shadow:var(--shadow2);
+}
+.overlay.open .confirm-box{transform:scale(1)}
+.confirm-icon{font-size:24px;margin-bottom:10px}
+.confirm-title{font-size:15px;font-weight:600;margin-bottom:6px}
+.confirm-msg{font-size:12px;color:var(--t2);margin-bottom:18px;line-height:1.5}
+.confirm-actions{display:flex;gap:8px}
+.confirm-yes{
+  flex:1;padding:8px;
+  background:var(--r-dim);border:1px solid rgba(192,96,96,.3);
+  border-radius:var(--r);color:var(--red);font-size:12px;font-weight:600;
+  transition:all .12s;
+}
+.confirm-yes:hover{background:rgba(192,96,96,.2)}
+.confirm-no{
+  flex:1;padding:8px;background:transparent;
+  border:1px solid var(--s4);border-radius:var(--r);
+  color:var(--t2);font-size:12px;transition:all .12s;
+}
+.confirm-no:hover{border-color:var(--s5);color:var(--text)}
+
+/* QR */
+#qr-canvas{display:flex;justify-content:center;padding:14px 0}
+#qr-canvas canvas{border-radius:6px}
+.qr-addr{font-family:var(--mono);font-size:11px;color:var(--t3);text-align:center;margin-top:4px}
+
+/* Toasts */
+.toasts{
+  position:fixed;bottom:16px;right:16px;
+  display:flex;flex-direction:column-reverse;gap:6px;
+  z-index:200;pointer-events:none;
+}
+.toast{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 14px;
+  background:var(--s2);border:1px solid var(--s5);border-radius:var(--r);
+  font-size:12px;color:var(--text);
+  animation:toast-in .25s ease,toast-out .25s ease 2.9s forwards;
+  max-width:300px;box-shadow:var(--shadow);
+  font-family:var(--mono);
+}
+.toast.ok  {border-color:rgba(106,171,126,.35)}
+.toast.err {border-color:rgba(192,96,96,.35)}
+.toast-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+.toast.ok  .toast-dot{color:var(--green)}
+.toast.err .toast-dot{color:var(--red)}
+.toast.inf .toast-dot{color:var(--t3)}
+@keyframes toast-in {from{transform:translateX(10px);opacity:0}to{transform:none;opacity:1}}
+@keyframes toast-out{to  {transform:translateX(10px);opacity:0}}
+
+/* ══ MOBILE ════════════════════════════════════════════════════ */
+/* Mobile top bar (hidden on desktop) */
+.mobile-bar{display:none}
+
+@media(max-width:900px){
+  :root{--sw:0px;--lw:100%}
+
+  #sidebar{display:none}  /* hidden, account switching via mobile bar */
+
+  .mobile-bar{
+    display:flex;align-items:center;gap:0;
+    height:48px;background:var(--s0);
+    border-bottom:1px solid var(--s4);
+    flex-shrink:0;overflow-x:auto;
+    -ms-overflow-style:none;scrollbar-width:none;
+  }
+  .mobile-bar::-webkit-scrollbar{display:none}
+
+  .mobile-acct{
+    display:flex;align-items:center;gap:6px;
+    padding:0 14px;height:100%;
+    border-right:1px solid var(--s4);
+    font-size:11px;color:var(--t2);white-space:nowrap;
+    position:relative;flex-shrink:0;
+    transition:color .12s;
+  }
+  .mobile-acct.active{color:var(--accent)}
+  .mobile-acct-dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--t4);flex-shrink:0;
+  }
+  .mobile-acct.active .mobile-acct-dot{background:var(--accent)}
+  .mobile-acct-badge{
+    min-width:16px;height:16px;border-radius:8px;
+    background:var(--accent);color:#0d0c0b;
+    font-size:8px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;padding:0 3px;
+  }
+  .mobile-add-btn{
+    padding:0 14px;height:100%;
+    font-size:12px;color:var(--t3);
+    display:flex;align-items:center;gap:5px;
+    flex-shrink:0;
+  }
+
+  #app{flex-direction:column}
+  .app-body{display:flex;flex:1;min-height:0;position:relative;overflow:hidden}
+  #list-panel{
+    position:absolute;inset:0;
+    transform:translateX(0);
+    transition:transform .28s cubic-bezier(.4,0,.2,1);
+    width:100%;
+    z-index:1;
+  }
+  #reader-panel{
+    position:absolute;inset:0;
+    transform:translateX(100%);
+    transition:transform .28s cubic-bezier(.4,0,.2,1);
+    width:100%;
+    z-index:2;
+    background:var(--s1);
+  }
+  body.reader-open #list-panel{transform:translateX(-30%)}
+  body.reader-open #reader-panel{transform:translateX(0)}
+
+  .reader-back-btn{
+    display:flex;align-items:center;gap:6px;
+    padding:12px 16px;border-bottom:1px solid var(--s4);
+    font-size:13px;color:var(--t2);flex-shrink:0;
+    background:var(--s1);
+  }
+  .reader-back-btn:hover{color:var(--text)}
+
+  .reader-head{padding:14px 16px 12px}
+  .reader-subject{font-size:16px}
+  .reader-body{padding:14px 16px}
+  .reader-meta{font-size:10px}
+
+  .list-head{padding:8px 8px 0}
+
+  .toasts{bottom:10px;right:10px;left:10px;align-items:center}
+  .toast{max-width:100%}
+  .modal{padding:18px}
+}
+
+@media(max-width:480px){
+  .reader-subject{font-size:14px}
+  .modal-title{font-size:15px}
+}
+</style>
+</head>
+<body>
+
+<!-- Mobile account bar (only visible <900px) -->
+<div class="mobile-bar" id="mobile-bar"></div>
+
+<div id="app">
+  <!-- ── Sidebar ────────────────────────────────── -->
+  <aside id="sidebar">
+    <div class="sb-top">
+      <div class="logo">eleck<b>temp</b></div>
+      <div class="live-dot" id="live-dot" title="Vérification automatique toutes les 10s">
+        <div class="live-ring"></div>
+        <span>live</span>
+      </div>
+    </div>
+
+    <div class="sb-accounts" id="sb-accounts"></div>
+
+    <div class="sb-bottom">
+      <div class="quota-row">
+        <span class="quota-label">Boîtes actives</span>
+        <div class="quota-bar"><div class="quota-fill" id="quota-fill" style="width:0%"></div></div>
+        <span class="quota-count" id="quota-count">0/5</span>
+      </div>
+      <button class="btn-new-inbox" id="btn-new">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nouvelle boîte
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── App body ──────────────────────────────── -->
+  <div class="app-body" style="display:flex;flex:1;min-height:0;overflow:hidden">
+
+    <!-- ── List panel ──────────────────────────── -->
+    <section id="list-panel">
+      <div class="list-head">
+        <!-- Active inbox info -->
+        <div class="inbox-header">
+          <span class="inbox-addr empty" id="inbox-addr">Aucune boîte sélectionnée</span>
+          <button class="btn-copy-addr" id="btn-copy" title="Copier (C)" style="display:none">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <div class="inbox-timer-chip" id="inbox-timer" style="display:none"></div>
+        </div>
+        <!-- Search -->
+        <div class="search-row">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="search" type="text" placeholder="Rechercher…" autocomplete="off">
+        </div>
+        <!-- Filter tabs + toolbar -->
+        <div class="filter-tabs">
+          <button class="filter-tab active" data-f="all">Tous</button>
+          <button class="filter-tab" data-f="unread">Non lus</button>
+        </div>
+        <div class="list-toolbar">
+          <span class="lcount" id="lcount"></span>
+          <div class="ltool-btns">
+            <button class="ltool-btn" id="btn-mark-all" title="Tout marquer lu">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <button class="ltool-btn" id="btn-del-all" title="Vider la boîte">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+            </button>
+            <button class="ltool-btn" id="btn-del-acct" title="Supprimer cette boîte" style="display:none">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 11v6m4-6v6M9 6V4h6v2"/><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+            </button>
+            <button class="ltool-btn" id="btn-refresh" title="Actualiser (R)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="msg-list-body" id="msg-list"></div>
+    </section>
+
+    <!-- ── Reader panel ────────────────────────── -->
+    <main id="reader-panel">
+      <div class="reader-empty" id="reader-empty">
+        <div class="reader-empty-icon">✉</div>
+        <div class="reader-empty-title">Sélectionnez un message</div>
+        <div class="reader-empty-sub">ou créez une nouvelle boîte</div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-chip"><kbd>N</kbd> Nouvelle boîte</div>
+          <div class="shortcut-chip"><kbd>R</kbd> Actualiser</div>
+          <div class="shortcut-chip"><kbd>C</kbd> Copier l'adresse</div>
+          <div class="shortcut-chip"><kbd>Del</kbd> Supprimer</div>
+        </div>
+      </div>
+      <div class="reader-content" id="reader-content" style="display:none"></div>
+    </main>
+
+  </div><!-- /app-body -->
+</div><!-- /app -->
+
+<!-- ── Modal: Nouvelle boîte ──────────────────── -->
+<div class="overlay" id="modal-new">
+  <div class="modal">
+    <button class="modal-close" id="modal-new-close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="modal-title">Nouvelle boîte mail</div>
+    <div class="modal-sub">Choisissez un fournisseur</div>
+    <div class="modal-tabs" id="modal-tabs">
+      <button class="modal-tab active" data-prov="mailtm">mail.tm</button>
+      <button class="modal-tab" data-prov="tempmailio">temp-mail.io</button>
+      <button class="modal-tab" data-prov="smailpro">smailpro</button>
+    </div>
+    <div id="pf-mailtm">
+      <div class="form-group">
+        <label class="form-label">Domaine</label>
+        <select class="form-select" id="f-domain"><option>Chargement…</option></select>
+      </div>
+      <div class="preview-addr" id="f-preview">auto@…</div>
+    </div>
+    <div id="pf-tempmailio" style="display:none">
+      <div class="info-box">
+        <strong>temp-mail.io</strong> — adresse aléatoire instantanée.<br>
+        Aucun compte, pas de mot de passe requis.
+      </div>
+    </div>
+    <div id="pf-smailpro" style="display:none">
+      <div class="info-box">
+        <strong>smailpro</strong> — adresse via sonjj.com.<br>
+        Domaines variés. Durée de vie limitée.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="modal-new-cancel">Annuler</button>
+      <button class="btn-primary" id="modal-new-create">Créer la boîte</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal: QR ──────────────────────────────── -->
+<div class="overlay" id="modal-qr">
+  <div class="modal" style="max-width:280px;text-align:center">
+    <button class="modal-close" id="modal-qr-close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="modal-title" style="margin-bottom:2px">QR Code</div>
+    <div id="qr-canvas"></div>
+    <div class="qr-addr" id="qr-addr"></div>
+  </div>
+</div>
+
+<!-- ── Confirm ────────────────────────────────── -->
+<div class="overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-icon">⚠</div>
+    <div class="confirm-title" id="c-title">Confirmer</div>
+    <div class="confirm-msg" id="c-msg"></div>
+    <div class="confirm-actions">
+      <button class="confirm-no" id="c-no">Annuler</button>
+      <button class="confirm-yes" id="c-yes">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toasts ─────────────────────────────────── -->
+<div class="toasts" id="toasts"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+'use strict'
+
+const MAX_ACCOUNTS = 5
+const POLL_INTERVAL = 10000  // 10s auto-refresh
+
+// ── State ─────────────────────────────────────────────────────
+const S = {
+  accounts:   [],
+  activeIdx:  -1,
+  messages:   [],
+  selectedId: null,
+  domains:    [],
+  polling:    null,
+  timerInt:   null,
+  modalProv:  'mailtm',
+  filter:     'all',
+  knownIds:   new Set(),   // track known message IDs to detect new arrivals
+}
+
+function save() { try { localStorage.setItem('et_v3', JSON.stringify(S.accounts)) } catch {} }
+function load() {
+  try {
+    S.accounts = JSON.parse(
+      localStorage.getItem('et_v3') ||
+      localStorage.getItem('et_v2') ||
+      localStorage.getItem('et_accounts') || '[]'
+    )
+    // Migrate: drop accounts beyond limit
+    if (S.accounts.length > MAX_ACCOUNTS) S.accounts = S.accounts.slice(0, MAX_ACCOUNTS)
+  } catch {}
+}
+
+// ── API ────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts,
+  })
+  const text = await r.text()
+  try { return JSON.parse(text) } catch { return { raw: text } }
+}
+const authH = t => ({ headers: { Authorization: `Bearer ${t}` } })
+
+// ── Avatar helpers ─────────────────────────────────────────────
+const AV_COLORS = ['#7c6fcd','#4f8ef7','#3ba5a0','#6aab7e','#c8956c','#c06060','#e07bb5','#9b7cb8']
+function avColor(s) {
+  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffffff
+  return AV_COLORS[Math.abs(h) % AV_COLORS.length]
+}
+function avInitial(name, email) {
+  const s = (name || email || '?').trim()
+  return s[0].toUpperCase()
+}
+
+// ── Init ──────────────────────────────────────────────────────
+async function init() {
+  load()
+  try {
+    const { domains } = await api('/api/mailtm/domains')
+    S.domains = domains || []
+  } catch {}
+
+  if (S.accounts.length > 0) await refreshTokens()
+
+  renderSidebar()
+  renderMobileBar()
+  updateListHeader()
+  updateQuota()
+
+  if (S.accounts.length > 0) await selectAccount(0)
+}
+
+async function refreshTokens() {
+  for (let i = 0; i < S.accounts.length; i++) {
+    const a = S.accounts[i]
+    if (a.provider !== 'mailtm' || !a.password) continue
+    try {
+      const r = await api('/api/mailtm/token', {
+        method: 'POST', body: JSON.stringify({ address: a.email, password: a.password }),
+      })
+      if (r.token) S.accounts[i].token = r.token
+    } catch {}
+  }
+  save()
+}
+
+// ── Account creation ──────────────────────────────────────────
+async function createMailtm(domain) {
+  const d = domain || S.domains[0]
+  if (!d) throw new Error('Aucun domaine disponible — essayez temp-mail.io ou smailpro')
+  const name = rnd(10)
+  const pw   = rnd(8) + Math.floor(Math.random() * 9000 + 1000)
+  const addr = `${name}@${d}`
+  const acc = await api('/api/mailtm/accounts', { method: 'POST', body: JSON.stringify({ address: addr, password: pw }) })
+  if (acc['@type'] === 'hydra:Error' || acc.error)
+    throw new Error(acc['hydra:description'] || acc.error || 'Erreur création')
+  const tok = await api('/api/mailtm/token', { method: 'POST', body: JSON.stringify({ address: addr, password: pw }) })
+  if (!tok.token) throw new Error('Login échoué')
+  return { id: acc.id, email: addr, password: pw, token: tok.token, provider: 'mailtm', unread: 0, createdAt: Date.now() }
+}
+
+async function createTempmail() {
+  const r = await api('/api/tempmailio/new', { method: 'POST', body: JSON.stringify({}) })
+  if (!r.email) throw new Error('Erreur temp-mail.io: ' + JSON.stringify(r))
+  const token = r.token || r.sid || r.access_token || r.auth_token || null
+  return { id: r.email, email: r.email, token, provider: 'tempmailio', unread: 0, createdAt: Date.now() }
+}
+
+async function createSmailpro() {
+  const r = await api('/api/smailpro/new', { method: 'POST', body: JSON.stringify({}) })
+  if (!r.email) throw new Error('Erreur smailpro: ' + (r.error || 'adresse non reçue'))
+  return { id: r.email, email: r.email, token: null, provider: 'smailpro', unread: 0, createdAt: Date.now(), expiredAt: r.expired_at ? r.expired_at * 1000 : null }
+}
+
+// ── Sidebar render ────────────────────────────────────────────
+function renderSidebar() {
+  const wrap = document.getElementById('sb-accounts')
+  if (S.accounts.length === 0) {
+    wrap.innerHTML = `<div class="list-empty" style="height:auto;padding:30px 16px">
+      <div class="list-empty-icon">📭</div>
+      <div class="list-empty-title">Aucune boîte</div>
+      <div class="list-empty-sub">Créez votre première adresse</div>
+    </div>`
+    return
+  }
+  wrap.innerHTML = S.accounts.map((a, i) => {
+    const col = avColor(a.email)
+    const ini = avInitial('', a.email)
+    const provLabel = { mailtm: 'mail.tm', tempmailio: 'temp-mail', smailpro: 'smailpro' }[a.provider] || a.provider
+    const age = fmtAge(a.createdAt)
+    return `<div class="acct-card ${i === S.activeIdx ? 'active' : ''}" data-i="${i}">
+      <div class="acct-avatar" style="background:${col}">${ini}</div>
+      <div class="acct-info">
+        <div class="acct-email">${esc(a.email.split('@')[0])}<span style="color:var(--t3)">@${esc(a.email.split('@')[1] || '')}</span></div>
+        <div class="acct-meta">
+          <span class="acct-prov ${a.provider}">${provLabel}</span>
+          <span class="acct-time">${age}</span>
+        </div>
+      </div>
+      ${a.unread > 0 ? `<div class="acct-badge">${a.unread}</div>` : ''}
+    </div>`
+  }).join('')
+  wrap.querySelectorAll('.acct-card').forEach(el =>
+    el.addEventListener('click', () => selectAccount(+el.dataset.i))
+  )
+}
+
+function renderMobileBar() {
+  const bar = document.getElementById('mobile-bar')
+  if (!bar) return
+  bar.innerHTML = S.accounts.map((a, i) => {
+    const label = a.email.split('@')[0]
+    return `<button class="mobile-acct ${i === S.activeIdx ? 'active' : ''}" data-i="${i}">
+      <div class="mobile-acct-dot"></div>
+      <span style="font-family:var(--mono);font-size:11px">${esc(label)}</span>
+      ${a.unread > 0 ? `<div class="mobile-acct-badge">${a.unread}</div>` : ''}
+    </button>`
+  }).join('') + `<button class="mobile-add-btn" id="mob-add">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    <span style="font-size:11px">Nouveau</span>
+  </button>`
+  bar.querySelectorAll('.mobile-acct').forEach(el =>
+    el.addEventListener('click', () => selectAccount(+el.dataset.i))
+  )
+  document.getElementById('mob-add')?.addEventListener('click', openModalNew)
+}
+
+function updateQuota() {
+  const n = S.accounts.length
+  const fill = document.getElementById('quota-fill')
+  const count = document.getElementById('quota-count')
+  const btn = document.getElementById('btn-new')
+  if (fill) fill.style.width = `${(n / MAX_ACCOUNTS) * 100}%`
+  if (count) count.textContent = `${n}/${MAX_ACCOUNTS}`
+  if (btn) {
+    btn.disabled = n >= MAX_ACCOUNTS
+    btn.title = n >= MAX_ACCOUNTS ? 'Limite de 5 boîtes atteinte' : 'Nouvelle boîte'
+  }
+}
+
+// ── Select account ────────────────────────────────────────────
+async function selectAccount(idx) {
+  S.activeIdx = idx
+  S.messages = []
+  S.selectedId = null
+  S.knownIds = new Set()
+  S.filter = 'all'
+
+  // Reset filter tabs UI
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.toggle('active', t.dataset.f === 'all'))
+
+  renderSidebar()
+  renderMobileBar()
+  updateListHeader()
+  showReaderEmpty()
+  showSkeleton()
+
+  clearInterval(S.polling)
+  clearInterval(S.timerInt)
+
+  await fetchMessages()
+  startPolling()
+}
+
+// ── Fetch messages ────────────────────────────────────────────
+async function fetchMessages(manual = false) {
+  const a = S.accounts[S.activeIdx]
+  if (!a) return
+
+  const btn = document.getElementById('btn-refresh')
+  if (manual && btn) btn.classList.add('spin')
+
+  // Pulse the live indicator
+  pulseLive()
+
+  try {
+    let msgs = []
+    if (a.provider === 'mailtm') {
+      const d = await api('/api/mailtm/messages', authH(a.token))
+      msgs = d.messages || []
+    } else if (a.provider === 'tempmailio') {
+      const opts = a.token ? authH(a.token) : {}
+      const d = await api(`/api/tempmailio/messages/${encodeURIComponent(a.email)}`, opts)
+      msgs = normalizeTempmailIo(d.messages || [])
+    } else if (a.provider === 'smailpro') {
+      const d = await api(`/api/smailpro/messages/${encodeURIComponent(a.email)}`)
+      msgs = normalizeSmailpro(d.messages || [])
+    }
+
+    // Detect new arrivals (only if we had known IDs already)
+    const newIds = msgs.map(m => m.id)
+    const incoming = S.knownIds.size > 0
+      ? newIds.filter(id => !S.knownIds.has(id))
+      : []
+
+    S.knownIds = new Set(newIds)
+    S.messages = msgs
+    a.unread = msgs.filter(m => !m.seen).length
+    save()
+
+    renderList()
+    renderSidebar()
+    renderMobileBar()
+    updateListHeader()
+    updateCount()
+
+    // Animate new arrivals
+    if (incoming.length > 0) {
+      toast(`${incoming.length} nouveau${incoming.length > 1 ? 'x' : ''} message${incoming.length > 1 ? 's' : ''}`, 'ok')
+      updateTitle()
+      // Flash new rows
+      setTimeout(() => {
+        incoming.forEach(id => {
+          const el = document.querySelector(`.msg-row[data-id="${id}"]`)
+          if (el) { el.classList.add('new-arrival'); setTimeout(() => el.classList.remove('new-arrival'), 600) }
+        })
+      }, 50)
+    }
+
+    if (manual && !incoming.length) toast('Boîte à jour', 'inf')
+
+    // If selected message was deleted
+    if (S.selectedId && !msgs.find(m => m.id === S.selectedId)) {
+      S.selectedId = null; showReaderEmpty()
+    }
+  } catch (e) {
+    if (manual) toast('Erreur de récupération', 'err')
+  }
+
+  if (btn) btn.classList.remove('spin')
+}
+
+function startPolling() {
+  clearInterval(S.polling)
+  S.polling = setInterval(() => fetchMessages(false), POLL_INTERVAL)
+}
+
+function pulseLive() {
+  const dot = document.getElementById('live-dot')
+  if (!dot) return
+  dot.classList.remove('active')
+  requestAnimationFrame(() => requestAnimationFrame(() => dot.classList.add('active')))
+  setTimeout(() => dot.classList.remove('active'), 1500)
+}
+
+// ── Normalizers ───────────────────────────────────────────────
+function normalizeTempmailIo(msgs) {
+  return msgs.map(m => {
+    const fromRaw = m.from || m.mail_from || ''
+    let fromAddr, fromName
+    if (typeof fromRaw === 'object' && fromRaw !== null) {
+      fromAddr = fromRaw.address || fromRaw.addr || '—'
+      fromName = fromRaw.name || ''
+    } else {
+      const match = String(fromRaw).match(/^(.*?)\s*<([^>]+)>\s*$/)
+      fromAddr = match ? match[2] : (fromRaw || '—')
+      fromName = match ? match[1].trim() : (m.mail_from_name || '')
+    }
+    const ts = m.receivedAt || m.mail_timestamp
+    const createdAt = ts ? new Date(ts * 1000).toISOString() : (m.date || m.createdAt || new Date().toISOString())
+    return {
+      id: m._id || m.id || m.mail_id || String(Math.random()),
+      from: { address: fromAddr, name: fromName },
+      to: [{ address: m.mailbox || m.mail_to || m.to || '' }],
+      subject: m.subject || m.mail_subject || '(Sans objet)',
+      seen: !!m.seen,
+      createdAt,
+      text: m.bodyText || m.bodyPreview || m.mail_text || m.body_text || m.text || '',
+      html: (m.bodyHtml || m.mail_html || m.body_html) ? [m.bodyHtml || m.mail_html || m.body_html] : [],
+      attachments: m.attachments || m.mail_attachments || [],
+    }
+  })
+}
+
+function normalizeSmailpro(msgs) {
+  return msgs.map(m => ({
+    id: m.mid || String(Math.random()),
+    from: { address: m.textFrom || '—', name: '' },
+    to: [{ address: m.textTo || '' }],
+    subject: m.textSubject || '(Sans objet)',
+    seen: false,
+    createdAt: m.textDate ? new Date(m.textDate).toISOString() : new Date().toISOString(),
+    text: '', html: [],
+    attachments: Array.isArray(m.attachments) ? m.attachments : [],
+  }))
+}
+
+// ── Render list ───────────────────────────────────────────────
+function showSkeleton() {
+  const list = document.getElementById('msg-list')
+  list.innerHTML = [1,2,3,4,5].map(() => `
+    <div class="skel-item">
+      <div class="skel-av"></div>
+      <div class="skel-lines">
+        <div class="skel-line" style="width:70%"></div>
+        <div class="skel-line" style="width:90%"></div>
+        <div class="skel-line"></div>
+      </div>
+    </div>`).join('')
+}
+
+function renderList() {
+  const list = document.getElementById('msg-list')
+  const q = (document.getElementById('search')?.value || '').toLowerCase()
+  let msgs = S.messages
+
+  // Filter
+  if (S.filter === 'unread') msgs = msgs.filter(m => !m.seen)
+  if (q) msgs = msgs.filter(m => {
+    const from = (m.from?.name + ' ' + m.from?.address).toLowerCase()
+    return from.includes(q) || (m.subject || '').toLowerCase().includes(q)
+  })
+
+  const a = S.accounts[S.activeIdx]
+  if (msgs.length === 0) {
+    list.innerHTML = `<div class="list-empty">
+      <div class="list-empty-icon">${a ? '📭' : '📬'}</div>
+      <div class="list-empty-title">${q ? 'Aucun résultat' : (S.filter === 'unread' ? 'Tout lu !' : (a ? 'Boîte vide' : 'Créez une boîte'))}</div>
+      <div class="list-empty-sub">${q ? `"${esc(q)}"` : (a ? 'En attente de messages…' : 'Cliquez sur « Nouvelle boîte »')}</div>
+    </div>`
+    return
+  }
+
+  list.innerHTML = msgs.map(m => {
+    const fromName = m.from?.name || m.from?.address || '—'
+    const fromAddr = m.from?.address || ''
+    const col = avColor(fromAddr || fromName)
+    const ini = avInitial(fromName, fromAddr)
+    const preview = m.intro || m.text?.slice(0, 80) || ''
+    const isUnread = !m.seen
+    const isActive = S.selectedId === m.id
+    return `<div class="msg-row ${isUnread ? 'unread' : ''} ${isActive ? 'active' : ''}" data-id="${esc(m.id)}">
+      <div class="msg-avatar ${isUnread ? 'unread-ring' : ''}" style="background:${col}">${ini}</div>
+      <div class="msg-body">
+        <div class="msg-row-top">
+          <span class="msg-from">${esc(fromName)}</span>
+          <span class="msg-time">${fmtTime(m.createdAt || m.date)}</span>
+          ${isUnread ? '<div class="unread-dot"></div>' : ''}
+        </div>
+        <div class="msg-subject">${esc(m.subject || '(Sans objet)')}</div>
+        ${preview ? `<div class="msg-preview">${esc(preview)}</div>` : ''}
+      </div>
+    </div>`
+  }).join('')
+
+  list.querySelectorAll('.msg-row').forEach(el =>
+    el.addEventListener('click', () => openMessage(el.dataset.id))
+  )
+}
+
+function updateListHeader() {
+  const a = S.accounts[S.activeIdx]
+  const addrEl = document.getElementById('inbox-addr')
+  const copyEl = document.getElementById('btn-copy')
+  const timerEl = document.getElementById('inbox-timer')
+  const delAcct = document.getElementById('btn-del-acct')
+
+  clearInterval(S.timerInt)
+
+  if (!a) {
+    addrEl.textContent = 'Aucune boîte sélectionnée'
+    addrEl.className = 'inbox-addr empty'
+    if (copyEl) copyEl.style.display = 'none'
+    if (timerEl) timerEl.style.display = 'none'
+    if (delAcct) delAcct.style.display = 'none'
+    return
+  }
+
+  addrEl.textContent = a.email
+  addrEl.className = 'inbox-addr'
+  if (copyEl) copyEl.style.display = ''
+  if (delAcct) delAcct.style.display = ''
+
+  // Timer
+  if (timerEl) {
+    timerEl.style.display = ''
+    const updateTimer = () => {
+      if (a.expiredAt) {
+        const ms = a.expiredAt - Date.now()
+        timerEl.textContent = ms <= 0 ? 'Expiré' : fmtMs(ms)
+        timerEl.className = 'inbox-timer-chip ' + (ms < 300000 ? 'warn' : '')
+      } else {
+        timerEl.textContent = fmtMs(Date.now() - a.createdAt)
+        timerEl.className = 'inbox-timer-chip'
+      }
+    }
+    updateTimer()
+    S.timerInt = setInterval(updateTimer, 1000)
+  }
+}
+
+function updateCount() {
+  const n = S.accounts[S.activeIdx]?.unread || 0
+  const lcount = document.getElementById('lcount')
+  const total = S.messages.length
+  if (lcount) {
+    lcount.innerHTML = total > 0
+      ? `<b>${n}</b> non lu${n !== 1 ? 's' : ''} · ${total} total`
+      : ''
+  }
+  updateTitle()
+}
+
+function updateTitle() {
+  const total = S.accounts.reduce((s, a) => s + (a.unread || 0), 0)
+  document.title = total > 0 ? `(${total}) elecktemp` : 'elecktemp'
+}
+
+// ── Open message ──────────────────────────────────────────────
+async function openMessage(id) {
+  S.selectedId = id
+  const a = S.accounts[S.activeIdx]
+  let msg = S.messages.find(m => m.id === id)
+  if (!msg) return
+
+  renderList() // Highlight active row
+
+  // Show loading in reader
+  showReaderLoading()
+
+  if (a?.provider === 'mailtm') {
+    try {
+      const full = await api(`/api/mailtm/messages/${id}`, authH(a.token))
+      if (full.id) {
+        msg = full
+        const i = S.messages.findIndex(m => m.id === id)
+        if (i !== -1) S.messages[i] = { ...S.messages[i], seen: true }
+        api(`/api/mailtm/messages/${id}/read`, { method: 'PATCH', ...authH(a.token) }).catch(() => {})
+      }
+    } catch {}
+  } else if (a?.provider === 'smailpro') {
+    try {
+      const full = await api(`/api/smailpro/message/${encodeURIComponent(a.email)}/${encodeURIComponent(id)}`)
+      if (full.body) {
+        const i = S.messages.findIndex(m => m.id === id)
+        if (i !== -1) { S.messages[i].html = [full.body]; S.messages[i].seen = true }
+        msg = { ...msg, html: [full.body], seen: true }
+      }
+    } catch {}
+  } else {
+    const i = S.messages.findIndex(m => m.id === id)
+    if (i !== -1) S.messages[i].seen = true
+  }
+
+  if (a) a.unread = S.messages.filter(m => !m.seen).length
+  save(); renderList(); renderSidebar(); renderMobileBar(); updateCount()
+  renderReader(msg)
+
+  // Mobile: slide reader in
+  document.body.classList.add('reader-open')
+}
+
+function showReaderEmpty() {
+  document.getElementById('reader-empty').style.display = 'flex'
+  document.getElementById('reader-content').style.display = 'none'
+  document.body.classList.remove('reader-open')
+}
+
+function showReaderLoading() {
+  const rc = document.getElementById('reader-content')
+  const re = document.getElementById('reader-empty')
+  re.style.display = 'none'
+  rc.style.display = 'flex'
+  rc.innerHTML = `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--t3)">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin .8s linear infinite"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+  </div>`
+}
+
+// ── Render reader ─────────────────────────────────────────────
+window._msg = null
+function renderReader(msg) {
+  if (!msg) return showReaderEmpty()
+  window._msg = msg
+
+  const rc = document.getElementById('reader-content')
+  const re = document.getElementById('reader-empty')
+  re.style.display = 'none'
+  rc.style.display = 'flex'
+
+  const fromName = msg.from?.name
+    ? `${msg.from.name} <${msg.from.address}>`
+    : (msg.from?.address || (typeof msg.from === 'string' ? msg.from : '—'))
+  const fromAddr = msg.from?.address || ''
+  const col = avColor(fromAddr || fromName)
+  const ini = avInitial(msg.from?.name || '', fromAddr)
+  const toAddr = msg.to?.[0]?.address || '—'
+  const date = fmtDateTime(msg.createdAt || msg.date)
+  const htmlContent = msg.html?.[0] || (typeof msg.html === 'string' ? msg.html : null)
+  const textContent = msg.text
+  const atts = msg.attachments || []
+
+  rc.innerHTML = `
+  <!-- Mobile back -->
+  <button class="reader-back-btn" id="reader-back" style="display:none">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Retour
+  </button>
+  <div class="reader-head">
+    <div class="reader-subject">${esc(msg.subject || '(Sans objet)')}</div>
+    <div class="reader-sender">
+      <div class="reader-av" style="background:${col}">${ini}</div>
+      <div class="reader-av-info">
+        <div class="reader-from-name">${esc(msg.from?.name || fromAddr)}</div>
+        <div class="reader-from-addr">${esc(fromAddr)}</div>
+      </div>
+      <div class="reader-date">${date}</div>
+    </div>
+    <div class="reader-meta">
+      <div class="reader-meta-row">
+        <span class="reader-meta-key">À</span>
+        <span class="reader-meta-val">${esc(toAddr)}</span>
+      </div>
+    </div>
+    <div class="reader-actions">
+      ${htmlContent && textContent ? `
+        <button class="raction" onclick="setViewMode('html')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>HTML
+        </button>
+        <button class="raction" onclick="setViewMode('text')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="13" y1="18" x2="3" y2="18"/></svg>Texte
+        </button>` : ''}
+      <button class="raction" onclick="copyEmailAddr()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copier adresse
+      </button>
+      <button class="raction" onclick="dlMsg()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Télécharger
+      </button>
+      <button class="raction danger" onclick="deleteMsg('${esc(msg.id)}')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6M9 6V4h6v2"/></svg>Supprimer
+      </button>
+    </div>
+    ${atts.length > 0 ? `<div class="reader-attachments">
+      ${atts.map(at => `<div class="attach-chip">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        ${esc(at.filename || at.name || 'pièce jointe')}
+      </div>`).join('')}
+    </div>` : ''}
+  </div>
+  <div class="reader-body" id="reader-body"></div>`
+
+  // Mobile back button
+  if (window.innerWidth <= 900) {
+    document.getElementById('reader-back').style.display = 'flex'
+  }
+  document.getElementById('reader-back')?.addEventListener('click', () => {
+    S.selectedId = null; showReaderEmpty(); renderList()
+  })
+
+  setViewMode(htmlContent ? 'html' : 'text', msg)
+}
+
+function setViewMode(mode, msg) {
+  msg = msg || window._msg; if (!msg) return
+  const body = document.getElementById('reader-body'); if (!body) return
+  const html = msg.html?.[0] || (typeof msg.html === 'string' ? msg.html : null)
+  const text = msg.text
+  if (mode === 'html' && html) {
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+    body.innerHTML = `<iframe src="${url}" sandbox="allow-same-origin" onload="this.style.height=Math.max(this.contentDocument.body?.scrollHeight||400,200)+40+'px'"></iframe>`
+  } else if (text) {
+    body.innerHTML = `<div class="text-body">${esc(text)}</div>`
+  } else {
+    body.innerHTML = `<div class="text-body" style="color:var(--t3)">Aucun contenu lisible.</div>`
+  }
+}
+
+// ── Actions ───────────────────────────────────────────────────
+function copyEmailAddr() {
+  const a = S.accounts[S.activeIdx]; if (!a) return
+  navigator.clipboard.writeText(a.email).catch(() => {})
+  toast('Adresse copiée', 'ok')
+}
+
+function copyAddr() {
+  copyEmailAddr()
+  const btn = document.getElementById('btn-copy')
+  if (btn) { btn.classList.add('ok'); setTimeout(() => btn.classList.remove('ok'), 2000) }
+}
+
+function dlMsg() {
+  const m = window._msg; if (!m) return
+  const c = `From: ${m.from?.address||'—'}\nTo: ${m.to?.[0]?.address||'—'}\nSubject: ${m.subject||''}\nDate: ${m.createdAt||''}\n\n${m.text||''}`
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([c], { type: 'text/plain' }))
+  a.download = `${(m.subject||'email').slice(0,40).replace(/[^a-z0-9]/gi,'_')}.txt`
+  a.click(); toast('Email téléchargé', 'ok')
+}
+
+async function deleteMsg(id) {
+  const a = S.accounts[S.activeIdx]; if (!a) return
+  confirm('Supprimer ce message ?', 'Cette action est irréversible.', async () => {
+    try {
+      if (a.provider === 'mailtm')
+        await api(`/api/mailtm/messages/${id}`, { method: 'DELETE', ...authH(a.token) })
+      S.messages = S.messages.filter(m => m.id !== id)
+      S.knownIds.delete(id)
+      S.selectedId = null
+      a.unread = S.messages.filter(m => !m.seen).length
+      save(); renderList(); renderSidebar(); renderMobileBar(); updateCount()
+      showReaderEmpty(); toast('Message supprimé', 'ok')
+    } catch { toast('Erreur suppression', 'err') }
+  })
+}
+
+async function deleteAllMsgs() {
+  const a = S.accounts[S.activeIdx]
+  if (!a || S.messages.length === 0) return
+  confirm(`Vider la boîte ?`, `${S.messages.length} message(s) seront supprimés.`, async () => {
+    if (a.provider === 'mailtm')
+      await Promise.allSettled(S.messages.map(m => api(`/api/mailtm/messages/${m.id}`, { method: 'DELETE', ...authH(a.token) })))
+    S.messages = []; S.selectedId = null; S.knownIds = new Set()
+    a.unread = 0; save()
+    renderList(); renderSidebar(); renderMobileBar(); updateCount()
+    showReaderEmpty(); toast('Boîte vidée', 'ok')
+  })
+}
+
+async function deleteAccount() {
+  const a = S.accounts[S.activeIdx]; if (!a) return
+  confirm(`Supprimer la boîte ?`, `${a.email} sera définitivement supprimée.`, async () => {
+    if (a.provider === 'mailtm' && a.id)
+      await api(`/api/mailtm/accounts/${a.id}`, { method: 'DELETE', ...authH(a.token) }).catch(() => {})
+    S.accounts.splice(S.activeIdx, 1); save()
+    S.activeIdx = -1; S.messages = []; S.selectedId = null; S.knownIds = new Set()
+    clearInterval(S.polling); clearInterval(S.timerInt)
+    renderSidebar(); renderMobileBar(); updateListHeader(); renderList()
+    showReaderEmpty(); updateQuota()
+    if (S.accounts.length > 0) await selectAccount(0)
+    toast('Boîte supprimée', 'ok')
+  })
+}
+
+function markAllRead() {
+  const a = S.accounts[S.activeIdx]; if (!a) return
+  S.messages.forEach(m => {
+    if (!m.seen && a.provider === 'mailtm')
+      api(`/api/mailtm/messages/${m.id}/read`, { method: 'PATCH', ...authH(a.token) }).catch(() => {})
+    m.seen = true
+  })
+  a.unread = 0; save()
+  renderList(); renderSidebar(); renderMobileBar(); updateCount()
+  toast('Tout marqué comme lu', 'ok')
+}
+
+// ── Modal ─────────────────────────────────────────────────────
+function openModalNew() {
+  if (S.accounts.length >= MAX_ACCOUNTS) {
+    toast(`Limite de ${MAX_ACCOUNTS} boîtes atteinte`, 'err'); return
+  }
+  const sel = document.getElementById('f-domain')
+  if (S.domains.length > 0)
+    sel.innerHTML = S.domains.map(d => `<option>${d}</option>`).join('')
+  else
+    sel.innerHTML = '<option disabled>Aucun domaine dispo</option>'
+  updatePreview()
+  document.getElementById('modal-new').classList.add('open')
+}
+function closeModalNew() { document.getElementById('modal-new').classList.remove('open') }
+
+function updatePreview() {
+  const d = document.getElementById('f-domain')?.value
+  const p = document.getElementById('f-preview')
+  if (p) p.textContent = d ? `auto@${d}` : 'Nom auto-généré'
+}
+
+async function handleCreate() {
+  const btn = document.getElementById('modal-new-create')
+  btn.disabled = true; btn.textContent = 'Création…'
+  try {
+    let a = null
+    if (S.modalProv === 'mailtm') {
+      const d = document.getElementById('f-domain')?.value
+      a = await createMailtm(d)
+    } else if (S.modalProv === 'tempmailio') {
+      a = await createTempmail()
+    } else {
+      a = await createSmailpro()
+    }
+    if (a) {
+      S.accounts.push(a); save()
+      closeModalNew()
+      updateQuota()
+      await selectAccount(S.accounts.length - 1)
+      toast(a.email, 'ok')
+    }
+  } catch (e) { toast(e.message || 'Erreur création', 'err') }
+  btn.disabled = false; btn.textContent = 'Créer la boîte'
+}
+
+// ── QR ────────────────────────────────────────────────────────
+function openQR() {
+  const a = S.accounts[S.activeIdx]; if (!a) return
+  document.getElementById('qr-addr').textContent = a.email
+  const c = document.getElementById('qr-canvas'); c.innerHTML = ''
+  new QRCode(c, { text: a.email, width: 180, height: 180, colorDark: '#c8956c', colorLight: '#161513', correctLevel: QRCode.CorrectLevel.M })
+  document.getElementById('modal-qr').classList.add('open')
+}
+function closeQR() { document.getElementById('modal-qr').classList.remove('open') }
+
+// ── Confirm ───────────────────────────────────────────────────
+let _confirmCb = null
+function confirm(title, msg, cb) {
+  document.getElementById('c-title').textContent = title
+  document.getElementById('c-msg').textContent = msg
+  _confirmCb = cb
+  document.getElementById('confirm-overlay').classList.add('open')
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+function toast(msg, type = 'inf') {
+  const stack = document.getElementById('toasts')
+  const el = document.createElement('div')
+  el.className = `toast ${type}`
+  el.innerHTML = `<span class="toast-dot"></span>${esc(msg)}`
+  stack.appendChild(el)
+  setTimeout(() => el.remove(), 3300)
+}
+
+// ── Utils ─────────────────────────────────────────────────────
+function rnd(n) {
+  return Array.from({ length: n }, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]).join('')
+}
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+function fmtTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso), now = new Date(), diff = now - d
+  if (diff < 60000) return 'maintenant'
+  if (diff < 3600000) return `${Math.floor(diff/60000)} min`
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return 'hier'
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+}
+function fmtDateTime(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'full', timeStyle: 'short' })
+}
+function fmtMs(ms) {
+  const s = Math.floor(Math.abs(ms) / 1000)
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
+}
+function fmtAge(ts) {
+  const diff = Date.now() - ts
+  if (diff < 3600000) return `${Math.floor(diff/60000)} min`
+  if (diff < 86400000) return `${Math.floor(diff/3600000)} h`
+  return `${Math.floor(diff/86400000)} j`
+}
+function pad(n) { return String(n).padStart(2, '0') }
+
+// ── Keyboard shortcuts ────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return
+  if (e.key === 'n' || e.key === 'N') openModalNew()
+  if (e.key === 'r' || e.key === 'R') fetchMessages(true)
+  if (e.key === 'c' || e.key === 'C') copyAddr()
+  if (e.key === 'q' || e.key === 'Q') openQR()
+  if (e.key === 'Escape') { closeModalNew(); closeQR() }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && S.selectedId) deleteMsg(S.selectedId)
+})
+
+// ── Event bindings ────────────────────────────────────────────
+document.getElementById('btn-new').addEventListener('click', openModalNew)
+document.getElementById('btn-copy').addEventListener('click', copyAddr)
+document.getElementById('btn-refresh').addEventListener('click', () => fetchMessages(true))
+document.getElementById('btn-mark-all').addEventListener('click', markAllRead)
+document.getElementById('btn-del-all').addEventListener('click', deleteAllMsgs)
+document.getElementById('btn-del-acct').addEventListener('click', deleteAccount)
+
+document.getElementById('modal-new-close').addEventListener('click', closeModalNew)
+document.getElementById('modal-new-cancel').addEventListener('click', closeModalNew)
+document.getElementById('modal-new-create').addEventListener('click', handleCreate)
+document.getElementById('modal-new').addEventListener('click', e => { if (e.target === e.currentTarget) closeModalNew() })
+
+document.getElementById('modal-qr-close').addEventListener('click', closeQR)
+document.getElementById('modal-qr').addEventListener('click', e => { if (e.target === e.currentTarget) closeQR() })
+
+document.querySelectorAll('.modal-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    S.modalProv = tab.dataset.prov
+    document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'))
+    tab.classList.add('active')
+    ;['mailtm','tempmailio','smailpro'].forEach(p => {
+      document.getElementById(`pf-${p}`).style.display = p === S.modalProv ? '' : 'none'
+    })
+    updatePreview()
+  })
+})
+
+document.getElementById('f-domain')?.addEventListener('change', updatePreview)
+document.getElementById('search').addEventListener('input', renderList)
+
+document.querySelectorAll('.filter-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    S.filter = tab.dataset.f
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.toggle('active', t.dataset.f === S.filter))
+    renderList()
+  })
+})
+
+document.getElementById('c-yes').addEventListener('click', () => {
+  document.getElementById('confirm-overlay').classList.remove('open')
+  _confirmCb?.(); _confirmCb = null
+})
+document.getElementById('c-no').addEventListener('click', () => {
+  document.getElementById('confirm-overlay').classList.remove('open')
+  _confirmCb = null
+})
+
+// ── Boot ──────────────────────────────────────────────────────
+init()
+</script>
+</body>
+</html>
